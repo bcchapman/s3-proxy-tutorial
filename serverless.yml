@@ -2,17 +2,49 @@ service: aws-java-simple-http-endpoint
 
 frameworkVersion: ">=1.2.0 <2.0.0"
 
+plugins:
+  - serverless-apigw-binary
+
+custom:
+  bucketName: "s3-proxy-tutorial-destination"
+  apigwBinary:
+    types:           #list of mime-types
+      - '*/*'
+
 provider:
   name: aws
+  region: us-east-2
   runtime: java11
+  iamRoleStatements: # permissions for all of your functions can be set here
+    - Effect: Allow
+      Action: # Gives permission to S3 tables in a specific region
+        - s3:ListBucket
+      Resource: { 'Fn::Join': ['', ['arn:aws:s3:::', { 'Ref': 'storageBucket' }]] }
+    - Effect: Allow
+      Action: # Gives permission to S3 tables in a specific region
+        - s3:PutObject
+      Resource  : { 'Fn::Join': ['', ['arn:aws:s3:::', { 'Ref': 'storageBucket' }, '/*']] }
 
 package:
-  artifact: build/distributions/s3-proxy-shadow.zip
+  artifact: build/libs/s3-proxy-all.jar
 
 functions:
   s3-proxy:
     handler: com.bcchapman.Handler
+    environment:
+      BUCKET_NAME: { 'Ref': 'storageBucket' }
     events:
       - http:
           path: createFile
           method: post
+          request:
+            parameters:
+              querystrings:
+                filePath: true
+
+resources:
+  Resources:
+    storageBucket:
+      Type: AWS::S3::Bucket
+      Properties:
+        BucketName: ${self:custom.bucketName}

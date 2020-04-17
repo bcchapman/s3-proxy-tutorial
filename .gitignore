@@ -7,3 +7,5 @@ build
 .serverless
 
 .idea
+
+node_modules

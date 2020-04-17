@@ -6,17 +6,44 @@ package com.bcchapman
 import com.amazonaws.services.lambda.runtime.Context
 import com.amazonaws.services.lambda.runtime.RequestHandler
 import com.amazonaws.services.lambda.runtime.events.APIGatewayV2ProxyRequestEvent
+import com.amazonaws.services.lambda.runtime.events.APIGatewayV2ProxyResponseEvent
+import com.sun.org.apache.xml.internal.security.utils.Base64
+import software.amazon.awssdk.core.sync.RequestBody
+import software.amazon.awssdk.services.s3.S3Client
+import software.amazon.awssdk.services.s3.model.PutObjectRequest
 
-class Handler : RequestHandler<APIGatewayV2ProxyRequestEvent, ProxyResponse> {
+class Handler : RequestHandler<APIGatewayV2ProxyRequestEvent, APIGatewayV2ProxyResponseEvent> {
     companion object {
+        val s3Client = S3Client.builder().build()
     }
 
-    override fun handleRequest(input: APIGatewayV2ProxyRequestEvent?, context: Context?): ProxyResponse {
+    override fun handleRequest(input: APIGatewayV2ProxyRequestEvent?, context: Context?): APIGatewayV2ProxyResponseEvent {
 
-        println("Beginning proxy of message")
+        val bucket = System.getenv("BUCKET_NAME")
+        println("Beginning proxy of message to $bucket")
+
+        val body = input!!.body
+        val bytes = when(input.isIsBase64Encoded) {
+            true -> Base64.decode(body)
+            false -> body.toByteArray()
+        }
+
+        val key = input.queryStringParameters["filePath"]
+        val putObjectRequest = PutObjectRequest
+            .builder()
+            .bucket(bucket)
+            .key(key)
+            .build()
+
+        val requestBody = RequestBody.fromBytes(bytes)
+        Handler.s3Client?.putObject(putObjectRequest, requestBody)
+
+        val response = APIGatewayV2ProxyResponseEvent()
+        response.body = "Sucessfully created $key in $bucket"
+        response.statusCode = 200
+
         println("Completed proxy of message")
-
-        return ProxyResponse("test-bucket", "test-key", 200)
+        return response
     }
 
 }

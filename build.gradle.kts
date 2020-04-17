@@ -15,6 +15,8 @@ plugins {
 
     id("com.github.johnrengelman.shadow") version "5.2.0"
 
+    java
+
     // Apply the application plugin to add support for building a CLI application.
     application
 }
@@ -55,4 +57,8 @@ application {
 }
 
 tasks.withType<com.github.jengelman.gradle.plugins.shadow.tasks.ShadowJar> {
+}
+
+tasks.withType<org.jetbrains.kotlin.gradle.tasks.KotlinCompile>().configureEach {
+    kotlinOptions.jvmTarget = "11"
 }
