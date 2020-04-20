@@ -3,5 +3,8 @@
   "dependencies": {
     "serverless": "^1.67.3",
     "serverless-apigw-binary": "^0.4.4"
+  },
+  "scripts": {
+    "deploy": "./gradlew build && serverless deploy"
   }
 }
