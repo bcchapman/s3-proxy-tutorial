@@ -8,13 +8,19 @@ import com.amazonaws.services.lambda.runtime.RequestHandler
 import com.amazonaws.services.lambda.runtime.events.APIGatewayV2ProxyRequestEvent
 import com.amazonaws.services.lambda.runtime.events.APIGatewayV2ProxyResponseEvent
 import com.sun.org.apache.xml.internal.security.utils.Base64
+import org.joda.time.DateTime
 import software.amazon.awssdk.core.sync.RequestBody
+import software.amazon.awssdk.services.dynamodb.DynamoDbClient
+import software.amazon.awssdk.services.dynamodb.model.AttributeValue
+import software.amazon.awssdk.services.dynamodb.model.PutItemRequest
 import software.amazon.awssdk.services.s3.S3Client
 import software.amazon.awssdk.services.s3.model.PutObjectRequest
+import java.time.format.DateTimeFormatter
 
 class Handler : RequestHandler<APIGatewayV2ProxyRequestEvent, APIGatewayV2ProxyResponseEvent> {
     companion object {
-        val s3Client = S3Client.builder().build()
+        val s3Client: S3Client = S3Client.builder().build()
+        val dynamoDbClient: DynamoDbClient = DynamoDbClient.builder().build()
     }
 
     override fun handleRequest(input: APIGatewayV2ProxyRequestEvent?, context: Context?): APIGatewayV2ProxyResponseEvent {
@@ -22,13 +28,32 @@ class Handler : RequestHandler<APIGatewayV2ProxyRequestEvent, APIGatewayV2ProxyR
         val bucket = System.getenv("BUCKET_NAME")
         println("Beginning proxy of message to $bucket")
 
+
+        // upload to s3
+        val user = "bcchapman"
+
+        println(input!!.headers)
+        val key = uploadToS3(input, user, bucket)
+
+        // store metadata
+        storeMetadata(user, bucket, key)
+        val response = APIGatewayV2ProxyResponseEvent()
+
+        response.body = "Sucessfully created $key in $bucket and stored metadata"
+        response.statusCode = 200
+
+        println("Completed proxy of message")
+        return response
+    }
+
+    private fun uploadToS3(input: APIGatewayV2ProxyRequestEvent?, user: String, bucket: String): String {
         val body = input!!.body
         val bytes = when(input.isIsBase64Encoded) {
             true -> Base64.decode(body)
             false -> body.toByteArray()
         }
 
-        val key = input.queryStringParameters["filePath"]
+        val key = String.format("%s/%s", user, input.queryStringParameters["filePath"])
         val putObjectRequest = PutObjectRequest
             .builder()
             .bucket(bucket)
@@ -36,14 +61,31 @@ class Handler : RequestHandler<APIGatewayV2ProxyRequestEvent, APIGatewayV2ProxyR
             .build()
 
         val requestBody = RequestBody.fromBytes(bytes)
-        Handler.s3Client?.putObject(putObjectRequest, requestBody)
+        Handler.s3Client.putObject(putObjectRequest, requestBody)
 
-        val response = APIGatewayV2ProxyResponseEvent()
-        response.body = "Sucessfully created $key in $bucket"
-        response.statusCode = 200
-
-        println("Completed proxy of message")
-        return response
+        return key
     }
 
+    private fun storeMetadata(user: String, bucket: String, key: String) {
+        val tableName = System.getenv("TABLE_NAME")
+        println("Storing metadata in $tableName")
+
+        val fileMetadata = FileMetadata(
+            user = user,
+            path = String.format("s3://%s/%s", bucket, key),
+            bucket = bucket,
+            prefix = key)
+
+        val putItemRequest = PutItemRequest.builder()
+            .tableName(tableName)
+            .item( mapOf(
+                "user" to AttributeValue.builder().s(fileMetadata.user).build(),
+                "path" to AttributeValue.builder().s(fileMetadata.path).build(),
+                "bucket" to AttributeValue.builder().s(fileMetadata.bucket).build(),
+                "prefix" to AttributeValue.builder().s(fileMetadata.prefix).build(),
+                "creationTime" to AttributeValue.builder().s(DateTimeFormatter.ISO_OFFSET_DATE_TIME.format(fileMetadata.creationDatetime)).build())
+            ).build()
+
+        Handler.dynamoDbClient.putItem(putItemRequest)
+    }
 }

@@ -7,6 +7,7 @@ plugins:
 
 custom:
   bucketName: "s3-proxy-tutorial-destination"
+  tableName: "s3-proxy-tutorial-metadata"
   apigwBinary:
     types:           #list of mime-types
       - '*/*'
@@ -17,13 +18,17 @@ provider:
   runtime: java11
   iamRoleStatements: # permissions for all of your functions can be set here
     - Effect: Allow
-      Action: # Gives permission to S3 tables in a specific region
+      Action: # Gives permission to S3 bucket
         - s3:ListBucket
       Resource: { 'Fn::Join': ['', ['arn:aws:s3:::', { 'Ref': 'storageBucket' }]] }
     - Effect: Allow
-      Action: # Gives permission to S3 tables in a specific region
+      Action: # Gives permission to S3 bucket
         - s3:PutObject
       Resource  : { 'Fn::Join': ['', ['arn:aws:s3:::', { 'Ref': 'storageBucket' }, '/*']] }
+    - Effect: Allow
+      Action: # Gives permission to dynamo tables in a specific region
+        - dynamodb:PutItem
+      Resource: { 'Fn::Join': ['', ['arn:aws:dynamodb:', { Ref: 'AWS::Region' }, ':', {  Ref: 'AWS::AccountId' }, ':table/', { 'Ref': 'metadataTable' }]] }
 
 package:
   artifact: build/libs/s3-proxy-all.jar
@@ -33,6 +38,7 @@ functions:
     handler: com.bcchapman.Handler
     environment:
       BUCKET_NAME: { 'Ref': 'storageBucket' }
+      TABLE_NAME: { 'Ref': 'metadataTable' }
     events:
       - http:
           path: createFile
@@ -48,3 +54,22 @@ resources:
       Type: AWS::S3::Bucket
       Properties:
         BucketName: ${self:custom.bucketName}
+    metadataTable:
+      Type: AWS::DynamoDB::Table
+      Properties:
+        AttributeDefinitions:
+          - AttributeName: user
+            AttributeType: S
+          - AttributeName: path
+            AttributeType: S
+        KeySchema:
+          - AttributeName: user
+            KeyType: HASH
+          - AttributeName: path
+            KeyType: RANGE
+        BillingMode:
+          PAY_PER_REQUEST
+        ProvisionedThroughput:
+          ReadCapacityUnits: 0
+          WriteCapacityUnits: 0
+        TableName: ${self:custom.tableName}

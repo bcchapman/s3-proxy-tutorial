@@ -42,6 +42,7 @@ dependencies {
     // AWS SDK
     implementation(platform("software.amazon.awssdk:bom:2.5.29"))
     implementation("software.amazon.awssdk:s3")
+    implementation("software.amazon.awssdk:dynamodb")
 
 
     // Use the Kotlin test library.
