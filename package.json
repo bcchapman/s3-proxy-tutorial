@@ -1,7 +1,7 @@
 {
   "name": "s3-proxy-tutorial",
   "dependencies": {
-    "serverless": "^1.67.3",
+    "serverless": "^3.25.1",
     "serverless-apigw-binary": "^0.4.4"
   },
   "scripts": {
